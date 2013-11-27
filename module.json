@@ -4,8 +4,14 @@
 	"namespace": "\\modules\\payment_paypal",
 	"config_controller": "administrator\\PaymentPayPal",
 	"controllers": [
-		"administrator\\PaymentPayPal"
+		"administrator\\PaymentPayPal",
+		"PaymentPayPal"
 	],
 	"default_config": {
+		"sdk_path": "/path/to/sdk",
+		"mode": "sandbox",
+		"username": "",
+		"password": "",
+		"signature": ""
 	}
 }
