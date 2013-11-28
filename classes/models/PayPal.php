@@ -22,11 +22,6 @@ class PayPal extends Model {
 			'data_type'      => 'bigint',
 			'null_allowed'   => FALSE,
 		],
-		'paypal_status' => [
-			'data_type'      => 'text',
-			'data_length'    => 32,
-			'null_allowed'   => FALSE,
-		],
 		'paypal_reference' => [
 			'data_type'      => 'text',
 			'data_length'    => 32,
@@ -55,7 +50,6 @@ class PayPal extends Model {
 	protected $indexes = [
 		'paypal_created',
 		'checkout_id',
-		'paypal_status',
 		'paypal_reference',
 	];
 

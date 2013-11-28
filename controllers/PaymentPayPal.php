@@ -31,7 +31,7 @@ class PaymentPayPal extends Controller {
 		parent::__construct($config, $database, $request, $response);
 		$module_config = $this->config->moduleConfig('Payment - PayPal');
 
-		$path = $module_config->sdk_path;
+		$path = $module_config->sdk_path.DS.'lib';
 		set_include_path($path . PATH_SEPARATOR . get_include_path());
 		require_once 'PayPal.php';
 		require_once 'PayPal/Profile/Handler/Array.php';
@@ -169,7 +169,6 @@ class PaymentPayPal extends Controller {
 		// Marshall data out of response
 		$details = $response->getDoExpressCheckoutPaymentResponseDetails();
 		$payment_info = $details->getPaymentInfo();
-		$tran_id = $payment_info->getTransactionID();
 		$fee_obj = $payment_info->getFeeAmount();
 		$fee = 0;
 		if ($fee_obj) {
@@ -190,9 +189,20 @@ class PaymentPayPal extends Controller {
 		else {
 			$checkout->status_id = $status->getStatusId('Complete');
 		}
+		$checkout->fees = $fee;
 		$checkout->update();
 		$order->sendOrderEmails($checkout, $this->language);
 		$cart->clear();
+
+		// create the paypal transaction record
+		$paypal = $model->getModel('\modules\payment_paypal\classes\models\PayPal');
+		$paypal->checkout_id             = $checkout->id;
+		$paypal->paypal_reference        = $payment_info->getTransactionID();
+		$paypal->paypal_amount           = $paypal_amount;
+		$paypal->paypal_fee              = $fee;
+		$paypal->paypal_payer_info       = json_encode($payer_info);
+		$paypal->paypal_transaction_info = json_encode($payment_info);
+		$paypal->insert();
 
 		if ($checkout->anonymous) {
 			$this->request->session->set('anonymous_checkout_purchase', TRUE);
@@ -272,13 +282,32 @@ class PaymentPayPal extends Controller {
 	}
 
 	protected function displayError($response = NULL) {
-		echo '<pre>';
-		print_r($response);
-		echo '</pre>';
+		$this->language->loadLanguageFile('payment_paypal.php', 'modules'.DS.'payment_paypal');
+
+		$error_message = '';
+		$errors = $response->getErrors();
+		$errors = is_array($errors) ? $errors : [ $errors ];
+		foreach ($errors as $error) {
+			$error_message .= $error->getErrorCode().': '.$error->getLongMessage().'<br />';
+		}
+		$this->logger->error("PayPal Error: $error_message");
+
+		$data = [
+			'ack'            => $response->getAck(),
+			'correlation_id' => $response->getCorrelationID(),
+			'version'        => $response->getVersion(),
+			'errors'         => $error_message,
+		];
+		$template = $this->getTemplate('pages/paypal_error.php', $data, 'modules'.DS.'payment_paypal');
+		$this->response->setContent($template->render());
 	}
 
 	protected function invalidCountry($country) {
-		print "You cannot purchase from $country";
+		$this->logger->info("Purchase from invalid country: $country");
+		$this->language->loadLanguageFile('payment_paypal.php', 'modules'.DS.'payment_paypal');
+		$data = ['message' => $this->language->get('invalid_country', [$country])];
+		$template = $this->getTemplate('pages/invalid_country.php', $data, 'modules'.DS.'payment_paypal');
+		$this->response->setContent($template->render());
 	}
 
 	protected function disablePayPalErrors() {
@@ -311,7 +340,7 @@ class PaymentPayPal extends Controller {
 				return TRUE;
 
 			default:
-				$this->logger->error('PayPal Request failed: ' . print_r($response, TRUE));
+				$this->logger->error('PayPal Request failed: ' . json_encode($response, TRUE));
 				$this->displayError($response);
 				return FALSE;
 		}
