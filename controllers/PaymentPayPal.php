@@ -333,6 +333,9 @@ class PaymentPayPal extends Controller {
 	}
 
 	protected function checkPaypalResponse($response) {
+		if (get_class($response) == 'SOAP_Fault') {
+			$this->logger->info('PayPal Error='.$response);
+		}
 		$ack = $response->getAck();
 		switch($ack) {
 			case 'Success':
