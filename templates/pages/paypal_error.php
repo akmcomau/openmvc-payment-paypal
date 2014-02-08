@@ -1,4 +1,4 @@
-<div class="container">
+<div class="<?php echo $page_div_class; ?>">
 	 <h2><?php echo $text_paypal_error; ?></h2>
 	 <table class="table">
 		 <tr>
