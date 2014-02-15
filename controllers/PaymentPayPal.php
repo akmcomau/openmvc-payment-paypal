@@ -27,6 +27,10 @@ class PaymentPayPal extends Controller {
 	protected $permissions = [
 	];
 
+	public function getAllUrls($include_filter = NULL, $exclude_filter = NULL) {
+		return [];
+	}
+
 	public function __construct(Config $config, Database $database = NULL, Request $request = NULL, Response $response = NULL) {
 		parent::__construct($config, $database, $request, $response);
 		$module_config = $this->config->moduleConfig('\modules\payment_paypal');
@@ -263,7 +267,7 @@ class PaymentPayPal extends Controller {
 			$city = $model->getModel('\core\classes\models\City');
 			$city->country_id = $country->id;
 			$city->state_id   = $state->id;
-			$city->name       = $paypal_address->getStateOrProvince();
+			$city->name       = $paypal_address->getCityName();
 			$city->insert();
 		}
 
