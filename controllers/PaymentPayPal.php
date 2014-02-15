@@ -29,7 +29,7 @@ class PaymentPayPal extends Controller {
 
 	public function __construct(Config $config, Database $database = NULL, Request $request = NULL, Response $response = NULL) {
 		parent::__construct($config, $database, $request, $response);
-		$module_config = $this->config->moduleConfig('Payment - PayPal');
+		$module_config = $this->config->moduleConfig('\modules\payment_paypal');
 
 		$path = $module_config->sdk_path.DS.'lib';
 		set_include_path($path . PATH_SEPARATOR . get_include_path());
@@ -51,7 +51,7 @@ class PaymentPayPal extends Controller {
 	}
 
 	public function payment() {
-		$module_config = $this->config->moduleConfig('Payment - PayPal');
+		$module_config = $this->config->moduleConfig('\modules\payment_paypal');
 		$this->disablePayPalErrors();
 
 		$cart = new CartContents($this->config, $this->database, $this->request);
@@ -108,7 +108,7 @@ class PaymentPayPal extends Controller {
 		$this->language->loadLanguageFile('checkout.php', 'modules'.DS.'checkout');
 		$this->language->loadLanguageFile('administrator/orders.php', 'modules'.DS.'checkout');
 
-		$module_config = $this->config->moduleConfig('Payment - PayPal');
+		$module_config = $this->config->moduleConfig('\modules\payment_paypal');
 		$this->disablePayPalErrors();
 
 		$cart = new CartContents($this->config, $this->database, $this->request);
