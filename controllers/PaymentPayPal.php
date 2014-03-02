@@ -186,7 +186,7 @@ class PaymentPayPal extends Controller {
 		// purchase the order
 		$model = new Model($this->config, $this->database);
 		$status = $model->getModel('\modules\checkout\classes\models\CheckoutStatus');
-		$checkout = $order->purchase($customer, $address, $address);
+		$checkout = $order->purchase('paypal', $customer, $address, $address);
 		if ($checkout->shipping_address_id) {
 			$checkout->status_id = $status->getStatusId('Processing');
 		}
