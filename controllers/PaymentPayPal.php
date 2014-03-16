@@ -64,6 +64,11 @@ class PaymentPayPal extends Controller {
 			throw new ErrorException('PayPal "mode" setting must be either "live" or "sandbox" or "beta-sandbox"');
 		}
 
+		if ($cart->getGrandTotal() == 0) {
+			$this->logger->info('Cart is empty');
+			throw new RedirectException($this->url->getUrl('Cart'));
+		}
+
 		// Payment parameters
 		$payment_type = 'Sale'; // ActionCodeType in ASP SDK
 		$currency     = 'AUD';
@@ -140,6 +145,9 @@ class PaymentPayPal extends Controller {
 		// Get the payer details
 		$resp_details = $response->getGetExpressCheckoutDetailsResponseDetails();
 		$payer_info = $resp_details->getPayerInfo();
+
+		$this->logger->info('PayPal Payer: '.json_encode($payer_info));
+
 		$customer = $this->createCustomer($payer_info);
 		$address = $this->createAddress($payer_info);
 		if (!$address) {
@@ -164,11 +172,14 @@ class PaymentPayPal extends Controller {
 		$ec_request =& PayPal::getType('DoExpressCheckoutPaymentRequestType');
 		$ec_request->setDoExpressCheckoutPaymentRequestDetails($ec_details);
 
+		$this->logger->info('PayPal Request: '.json_encode($ec_request));
+
 		$caller =& PayPal::getCallerServices($profile);
 		$response = $caller->DoExpressCheckoutPayment($ec_request);
 		if (!$this->checkPaypalResponse($response)) {
 			return;
 		}
+		$this->logger->info('PayPal Response: '.json_encode($response));
 
 		// Marshall data out of response
 		$details = $response->getDoExpressCheckoutPaymentResponseDetails();
