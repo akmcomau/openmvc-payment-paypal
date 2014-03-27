@@ -302,10 +302,13 @@ class PaymentPayPal extends Controller {
 		$error_message = '';
 		$errors = $response->getErrors();
 		$errors = is_array($errors) ? $errors : [ $errors ];
+		$is_10486 = FALSE;
 		foreach ($errors as $error) {
+			if ($error->getErrorCode() == 10486) {
+				$is_10486 = TRUE;
+			}
 			$error_message .= $error->getErrorCode().': '.$error->getLongMessage().'<br />';
 		}
-		$this->logger->error("PayPal Error: $error_message");
 
 		$data = [
 			'ack'            => $response->getAck(),
@@ -313,7 +316,14 @@ class PaymentPayPal extends Controller {
 			'version'        => $response->getVersion(),
 			'errors'         => $error_message,
 		];
-		$template = $this->getTemplate('pages/paypal_error.php', $data, 'modules'.DS.'payment_paypal');
+		if ($is_10486) {
+			$this->logger->info("PayPal Error: $error_message");
+			$template = $this->getTemplate('pages/paypal_error_10486.php', $data, 'modules'.DS.'payment_paypal');
+		}
+		else {
+			$this->logger->error("PayPal Error: $error_message");
+			$template = $this->getTemplate('pages/paypal_error.php', $data, 'modules'.DS.'payment_paypal');
+		}
 		$this->response->setContent($template->render());
 	}
 
@@ -358,7 +368,6 @@ class PaymentPayPal extends Controller {
 				return TRUE;
 
 			default:
-				$this->logger->error('PayPal Request failed: ' . json_encode($response, TRUE));
 				$this->displayError($response);
 				return FALSE;
 		}
