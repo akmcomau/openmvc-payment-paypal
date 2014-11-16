@@ -73,8 +73,8 @@ class PaymentPayPal extends Controller {
 		$payment_type = 'Sale'; // ActionCodeType in ASP SDK
 		$currency     = 'AUD';
 		$amount       = $cart->getGrandTotal();
-		$return_url   = $this->config->getSiteURL().$this->url->getUrl('PaymentPayPal', 'confirm');
-		$cancel_url   = $this->config->getSiteURL().$this->url->getUrl('Cart');
+		$return_url   = $this->url->getUrl('PaymentPayPal', 'confirm');
+		$cancel_url   = $this->url->getUrl('Cart');
 
 		// Initalize the request
 		$ec_request =& PayPal::getType('SetExpressCheckoutRequestType');
