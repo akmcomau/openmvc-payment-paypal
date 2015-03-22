@@ -8,6 +8,8 @@ use core\classes\Encryption;
 use PayPal\Rest\ApiContext;
 use PayPal\Auth\OAuthTokenCredential;
 use PayPal\Api\Amount;
+use PayPal\Api\Item;
+use PayPal\Api\ItemList;
 use PayPal\Api\Payer;
 use PayPal\Api\Payment;
 use PayPal\Api\PaymentExecution;
@@ -48,9 +50,24 @@ class PayPalRestAPI {
 		$amount->setCurrency($this->module_config->currency);
 		$amount->setTotal($cart->getGrandTotal());
 
+		// Create the items
+		$items = new ItemList();
+		/*
+		foreach ($cart->getContents() as $cart_item) {
+			$item = new Item();
+			$item->setQuantity($cart_item->getQuantity());
+			$item->setName($cart_item->getName());
+			$item->setPrice($cart_item->getPrice());
+			$item->setCurrency($this->module_config->currency);
+			$item->setSku('asdfad'.rand());
+			$items->addItem(array($item));
+		}
+		*/
+
 		$transaction = new Transaction();
-		$transaction->setDescription("creating a payment");
+		$transaction->setDescription($this->config->siteConfig()->name." Checkout");
 		$transaction->setAmount($amount);
+		$transaction->setItemList($items);
 
 		$redirectUrls = new RedirectUrls();
 		$redirectUrls->setReturnUrl($this->url->getUrl('PaymentPayPal', 'confirm'));
