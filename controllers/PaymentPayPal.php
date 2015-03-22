@@ -2,6 +2,7 @@
 
 namespace modules\payment_paypal\controllers;
 
+use Exception;
 use ErrorException;
 use core\classes\exceptions\RedirectException;
 use core\classes\renderable\Controller;
@@ -13,14 +14,9 @@ use core\classes\Encryption;
 use core\classes\Model;
 use core\classes\Pagination;
 use core\classes\FormValidator;
-use modules\checkout\classes\Cart as CartContents;
+use modules\checkout\classes\Cart;
 use modules\checkout\classes\Order;
-
-use PayPal;
-use ProfileHandler_Array;
-use ProfileHandler;
-use APIProfile;
-use CallerServices;
+use modules\payment_paypal\classes\PayPalRestAPI;
 
 class PaymentPayPal extends Controller {
 
@@ -31,85 +27,27 @@ class PaymentPayPal extends Controller {
 		return [];
 	}
 
-	public function __construct(Config $config, Database $database = NULL, Request $request = NULL, Response $response = NULL) {
-		parent::__construct($config, $database, $request, $response);
-		$module_config = $this->config->moduleConfig('\modules\payment_paypal');
-
-		$path = $module_config->sdk_path.DS.'lib';
-		set_include_path($path . PATH_SEPARATOR . get_include_path());
-		require_once 'PayPal.php';
-		require_once 'PayPal/Profile/Handler/Array.php';
-		require_once 'PayPal/Profile/API.php';
-		require_once 'PayPal/Type/PayerInfoType.php';
-		require_once 'PayPal/Type/AddressType.php';
-		require_once 'PayPal/Type/AbstractResponseType.php';
-		require_once 'PayPal/Type/ErrorType.php';
-		require_once 'PayPal/Type/GetTransactionDetailsResponseType.php';
-		require_once 'PayPal/Type/SetExpressCheckoutResponseType.php';
-		require_once 'PayPal/Type/GetExpressCheckoutDetailsResponseDetailsType.php';
-		require_once 'PayPal/Type/GetExpressCheckoutDetailsResponseType.php';
-		require_once 'PayPal/Type/DoExpressCheckoutPaymentResponseType.php';
-		require_once 'PayPal/Type/DoCaptureResponseDetailsType.php';
-		require_once 'PayPal/Type/DoCaptureResponseType.php';
-		require_once 'PayPal/Type/DoVoidResponseType.php';
-	}
-
 	public function payment() {
-		$module_config = $this->config->moduleConfig('\modules\payment_paypal');
-		$this->disablePayPalErrors();
-
-		$cart = new CartContents($this->config, $this->database, $this->request);
-
-		if ($module_config->mode != 'live' && $module_config->mode != 'sandbox' && $module_config->mode != 'beta-sandbox') {
-			throw new ErrorException('PayPal "mode" setting must be either "live" or "sandbox" or "beta-sandbox"');
-		}
+		$cart = new Cart($this->config, $this->database, $this->request);
 
 		if ($cart->getGrandTotal() == 0) {
 			$this->logger->info('Cart is empty');
 			throw new RedirectException($this->url->getUrl('Cart'));
 		}
 
-		// Payment parameters
-		$payment_type = 'Sale'; // ActionCodeType in ASP SDK
-		$currency     = 'AUD';
-		$amount       = $cart->getGrandTotal();
-		$return_url   = $this->url->getUrl('PaymentPayPal', 'confirm');
-		$cancel_url   = $this->url->getUrl('Cart');
-
-		// Initalize the request
-		$ec_request =& PayPal::getType('SetExpressCheckoutRequestType');
-		$ec_details =& PayPal::getType('SetExpressCheckoutRequestDetailsType');
-		$ec_details->setReturnURL($return_url);
-		$ec_details->setCancelURL($cancel_url);
-		$ec_details->setPaymentAction($payment_type);
-		$amt_type =& PayPal::getType('BasicAmountType');
-		$amt_type->setattr('currencyID', $currency);
-		$amt_type->setval($amount, 'iso-8859-1');
-		$ec_details->setOrderTotal($amt_type);
-		$ec_request->setSetExpressCheckoutRequestDetails($ec_details);
-
-		$profile = $this->getPaypalProfile($module_config);
-		$caller =& PayPal::getCallerServices($profile);
-		$response = $caller->SetExpressCheckout($ec_request);
-
-		if (get_class($response) == 'SOAP_Fault') {
-			$this->logger->info('PayPal Error='.$response);
-			$ack = 'ERROR';
+		$payment = null;
+		try {
+			$api = new PayPalRestAPI($this->config, $this->url);
+			$payment = $api->set_express_checkout($cart);
 		}
-		else {
-			$ack = $response->getAck();
+		catch (Exception $ex) {
+			$this->logger->error('PayPal Error: '.$ex->getMessage());
+			$this->display_error();
+			return;
 		}
 
-		if ($this->checkPaypalResponse($response)) {
-			// Extract the response details.
-			// Redirect to paypal.com.
-			$token = $response->getToken();
-			$paypal_url = "https://www.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token=$token";
-			if("sandbox" === $module_config->mode || "beta-sandbox" === $module_config->mode) {
-				$paypal_url = "https://www.".$module_config->mode.".paypal.com/cgi-bin/webscr?cmd=_express-checkout&token=$token";
-			}
-			throw new RedirectException($paypal_url);
-		}
+		$this->logger->error('Redirecting to PayPal: '.serialize($payment));
+		throw new RedirectException($payment->getApprovalLink());
 	}
 
 	public function confirm() {
@@ -117,82 +55,46 @@ class PaymentPayPal extends Controller {
 		$this->language->loadLanguageFile('checkout.php', 'modules'.DS.'checkout');
 		$this->language->loadLanguageFile('administrator/orders.php', 'modules'.DS.'checkout');
 
-		$module_config = $this->config->moduleConfig('\modules\payment_paypal');
-		$this->disablePayPalErrors();
-
-		$cart = new CartContents($this->config, $this->database, $this->request);
+		$cart = new Cart($this->config, $this->database, $this->request);
 		$order = new Order($this->config, $this->database, $cart);
 
-		$token    = $this->request->requestParam('token');
-		$payer_id = $this->request->requestParam('PayerID');
+		$token      = $this->request->requestParam('token');
+		$payer_id   = $this->request->requestParam('PayerID');
+		$payment_id = $this->request->requestParam('paymentId');
 
-		$payment_type = 'Sale'; // ActionCodeType in ASP SDK
-		$currency     = 'AUD';
-		$amount       = $cart->getGrandTotal();
+		$payment = null;
+		$payer = null;
+		try {
+			$api = new PayPalRestAPI($this->config, $this->url);
+			$payment = $api->do_express_checkout_payment($payer_id, $payment_id, $token);
+			$payer = $payment->getPayer();
+			$this->logger->info('PayPal Payment Response: '.serialize($payment));
 
-		// create the request
-		$profile = $this->getPaypalProfile($module_config);
-		$ec_request =& PayPal::getType('GetExpressCheckoutDetailsRequestType');
-		$ec_request->setToken($token);
-		$caller =& PayPal::getCallerServices($profile);
-
-		// Execute SOAP request
-		$response = $caller->GetExpressCheckoutDetails($ec_request);
-		if (!$this->checkPaypalResponse($response)) {
+			$this->logger->error('Transaction state: '.$payment->getState());
+		    if ($payment->getState() != 'approved') {
+				$this->display_error('Transaction was not approved.');
+				return;
+			}
+		}
+		catch (Exception $ex) {
+			$this->logger->error('PayPal Error: '.$ex->getMessage());
+			$this->display_error();
 			return;
 		}
 
-		// Get the payer details
-		$resp_details = $response->getGetExpressCheckoutDetailsResponseDetails();
-		$payer_info = $resp_details->getPayerInfo();
+		// Get the fees
+		$transactions = $payment->getTransactions();
+		$sales = $transactions[0]->getRelatedResources();
+		$sale = $sales[0]->getSale();
+		$fee = $sale->getTransactionFee()->getValue();
+		$fee = $fee ? $fee : 0;
 
-		$this->logger->info('PayPal Payer: '.json_encode($payer_info));
-
-		$customer = $this->createCustomer($payer_info);
-		$address = $this->createAddress($payer_info);
+		// create the customer
+		$customer = $this->createCustomer($payer->getPayerInfo());
+		$address = $this->createAddress($payer->getPayerInfo());
 		if (!$address) {
 			return;
 		}
-
-		// do the transaction
-		$ec_details =& PayPal::getType('DoExpressCheckoutPaymentRequestDetailsType');
-		$ec_details->setToken($token);
-		$ec_details->setPayerID($payer_id);
-		$ec_details->setPaymentAction($payment_type);
-
-		$amt_type =& PayPal::getType('BasicAmountType');
-		$amt_type->setattr('currencyID', $currency);
-		$amt_type->setval($amount, 'iso-8859-1');
-
-		$payment_details =& PayPal::getType('PaymentDetailsType');
-		$payment_details->setOrderTotal($amt_type);
-
-		$ec_details->setPaymentDetails($payment_details);
-
-		$ec_request =& PayPal::getType('DoExpressCheckoutPaymentRequestType');
-		$ec_request->setDoExpressCheckoutPaymentRequestDetails($ec_details);
-
-		$this->logger->info('PayPal Request: '.json_encode($ec_request));
-
-		$caller =& PayPal::getCallerServices($profile);
-		$response = $caller->DoExpressCheckoutPayment($ec_request);
-		if (!$this->checkPaypalResponse($response)) {
-			return;
-		}
-		$this->logger->info('PayPal Response: '.json_encode($response));
-
-		// Marshall data out of response
-		$details = $response->getDoExpressCheckoutPaymentResponseDetails();
-		$payment_info = $details->getPaymentInfo();
-		$fee_obj = $payment_info->getFeeAmount();
-		$fee = 0;
-		if ($fee_obj) {
-			$fee = $fee_obj->_value;
-		}
-
-		$amt_obj = $payment_info->getGrossAmount();
-		$paypal_amount = $amt_obj->_value;
-		$paypal_currency = $amt_obj->_attributeValues['currencyID'];
 
 		// purchase the order
 		$model = new Model($this->config, $this->database);
@@ -212,11 +114,11 @@ class PaymentPayPal extends Controller {
 		// create the paypal transaction record
 		$paypal = $model->getModel('\modules\payment_paypal\classes\models\PayPal');
 		$paypal->checkout_id             = $checkout->id;
-		$paypal->paypal_reference        = $payment_info->getTransactionID();
-		$paypal->paypal_amount           = $paypal_amount;
+		$paypal->paypal_reference        = $payment_id;
+		$paypal->paypal_amount           = $sale->getAmount()->getTotal();
 		$paypal->paypal_fee              = $fee;
-		$paypal->paypal_payer_info       = json_encode($payer_info);
-		$paypal->paypal_transaction_info = json_encode($payment_info);
+		$paypal->paypal_payer_info       = serialize($payer->getPayerInfo());
+		$paypal->paypal_transaction_info = serialize($payment);
 		$paypal->insert();
 
 		if ($checkout->anonymous) {
@@ -230,13 +132,12 @@ class PaymentPayPal extends Controller {
 	}
 
 	protected function createCustomer($payer_info) {
-		$paypal_person  = $payer_info->getPayerName();
 		$model = new Model($this->config, $this->database);
 		$customer = $model->getModel('\core\classes\models\Customer');
 		$customer->password   = '';
-		$customer->first_name = $paypal_person->getFirstName();
-		$customer->last_name  = $paypal_person->getLastName();
-		$customer->email      = $payer_info->getPayer();
+		$customer->first_name = $payer_info->getFirstName();
+		$customer->last_name  = $payer_info->getLastName();
+		$customer->email      = $payer_info->getEmail();
 		$customer->login      = $customer->email;
 
 		return $customer;
@@ -244,27 +145,27 @@ class PaymentPayPal extends Controller {
 
 	protected function createAddress($payer_info) {
 		$model = new Model($this->config, $this->database);
-		$paypal_address = $payer_info->getAddress();
-		$paypal_person  = $payer_info->getPayerName();
+		$paypal_address = $payer_info->getShippingAddress();
 
 		# The country must exist
 		$country = $model->getModel('\core\classes\models\Country')->get([
-			'code' => $paypal_address->getCountry()
+			'code' => $paypal_address->getCountryCode()
 		]);
 		if (!$country) {
-			$this->invalidCountry($paypal_address->getCountryName());
+			$this->invalidCountry($paypal_address->getCountryCode());
 			return NULL;
 		}
 
 		// get the state
 		$state = $model->getModel('\core\classes\models\State')->get([
 			'country_id' => $country->id,
-			'name' => $paypal_address->getStateOrProvince(),
+			'code' => $paypal_address->getState(),
 		]);
 		if (!$state) {
 			$state = $model->getModel('\core\classes\models\State');
 			$state->country_id = $country->id;
-			$state->name       = $paypal_address->getStateOrProvince();
+			$state->code       = $paypal_address->getState();
+			$state->name       = $paypal_address->getState();
 			$state->insert();
 		}
 
@@ -272,22 +173,22 @@ class PaymentPayPal extends Controller {
 		$city = $model->getModel('\core\classes\models\City')->get([
 			'country_id' => $country->id,
 			'state_id' => $state->id,
-			'name' => $paypal_address->getCityName(),
+			'name' => $paypal_address->getCity(),
 		]);
 		if (!$city) {
 			$city = $model->getModel('\core\classes\models\City');
 			$city->country_id = $country->id;
 			$city->state_id   = $state->id;
-			$city->name       = $paypal_address->getCityName();
+			$city->name       = $paypal_address->getCity();
 			$city->insert();
 		}
 
 		// create the address
 		$address = $model->getModel('\core\classes\models\Address');
-		$address->first_name  = $paypal_person->getFirstName();
-		$address->last_name   = $paypal_person->getLastName();
-		$address->line1       = $paypal_address->getStreet1();
-		$address->line2       = $paypal_address->getStreet2();
+		$address->first_name  = $payer_info->getFirstName();
+		$address->last_name   = $payer_info->getLastName();
+		$address->line1       = $paypal_address->getLine1();
+		$address->line2       = $paypal_address->getLine2() ? $paypal_address->getLine2() : '';
 		$address->postcode    = $paypal_address->getPostalCode();
 		$address->city_id     = $city->id;
 		$address->state_id    = $state->id;
@@ -296,11 +197,11 @@ class PaymentPayPal extends Controller {
 		return $address;
 	}
 
-	protected function displayError($response = NULL) {
+	protected function display_error($response = NULL) {
 		$this->language->loadLanguageFile('payment_paypal.php', 'modules'.DS.'payment_paypal');
 
 		$error_message = '';
-		$errors = $response->getErrors();
+		$errors = $response ? $response->getErrors() : array();
 		$errors = is_array($errors) ? $errors : [ $errors ];
 		$is_10486 = FALSE;
 		foreach ($errors as $error) {
@@ -309,12 +210,10 @@ class PaymentPayPal extends Controller {
 			}
 			$error_message .= $error->getErrorCode().': '.$error->getLongMessage().'<br />';
 		}
+		if ($error_message == '') $error_message = 'An error occurred';
 
 		$data = [
-			'ack'            => $response->getAck(),
-			'correlation_id' => $response->getCorrelationID(),
-			'version'        => $response->getVersion(),
-			'errors'         => $error_message,
+			'errors' => $error_message,
 		];
 		if ($is_10486) {
 			$this->logger->info("PayPal Error: $error_message");
@@ -333,43 +232,5 @@ class PaymentPayPal extends Controller {
 		$data = ['message' => $this->language->get('invalid_country', [$country])];
 		$template = $this->getTemplate('pages/invalid_country.php', $data, 'modules'.DS.'payment_paypal');
 		$this->response->setContent($template->render());
-	}
-
-	protected function disablePayPalErrors() {
-		// PayPal SDK throws a few notices and warning
-		suppress_exceptions('/((PayPal|PEAR|Log|ProfileHandler_Array|ProfileHandler|SOAP_Transport)::.* should not be called statically|Only variables should be (passed|assigned) by reference|A session had already been started|(include_once\(|Failed opening \')PayPal\/Type\/)/');
-	}
-
-	protected function getPaypalProfile($module_config) {
-		$handler = &ProfileHandler_Array::getInstance([
-			'username'        => $module_config->username,
-			'certificateFile' => null,
-			'subject'         => null,
-			'environment'     => $module_config->mode
-		]);
-		$pid = ProfileHandler::generateID();
-		$profile_obj = new APIProfile($pid, $handler);
-		$profile = &$profile_obj;
-		$profile->setAPIUsername($module_config->username);
-		$profile->setAPIPassword($module_config->password);
-		$profile->setSignature($module_config->signature);
-		$profile->setEnvironment($module_config->mode);
-		return $profile;
-	}
-
-	protected function checkPaypalResponse($response) {
-		if (get_class($response) == 'SOAP_Fault') {
-			$this->logger->info('PayPal Error='.$response);
-		}
-		$ack = $response->getAck();
-		switch($ack) {
-			case 'Success':
-			case 'SuccessWithWarning':
-				return TRUE;
-
-			default:
-				$this->displayError($response);
-				return FALSE;
-		}
 	}
 }

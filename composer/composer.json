@@ -1,0 +1,20 @@
+{
+	"repositories": [
+		{
+			"type":"package",
+			"package": {
+				"name": "paypal/PayPal-PHP-SDK",
+				"version":"v1.3.2",
+				"source": {
+					"url": "https://github.com/paypal/PayPal-PHP-SDK.git",
+					"type": "git",
+					"reference":"master"
+				}
+			}
+		}
+	],
+	"require": {
+		"paypal/PayPal-PHP-SDK": "v1.3.2"
+	}
+}
+

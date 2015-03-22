@@ -9,10 +9,9 @@ $_MODULE = [
 		"PaymentPayPal"
 	],
 	"default_config" => [
-		"sdk_path" => "/path/to/sdk",
+		"currency" => "AUD",
 		"mode" => "sandbox",
-		"username" => "",
-		"password" => "",
-		"signature" => ""
+		"client_id" => "",
+		"secret" => ""
 	]
 ];
