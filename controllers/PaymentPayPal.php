@@ -46,7 +46,7 @@ class PaymentPayPal extends Controller {
 			return;
 		}
 
-		$this->logger->error('Redirecting to PayPal: '.serialize($payment));
+		$this->logger->info('Redirecting to PayPal: '.serialize($payment));
 		throw new RedirectException($payment->getApprovalLink());
 	}
 
@@ -70,7 +70,7 @@ class PaymentPayPal extends Controller {
 			$payer = $payment->getPayer();
 			$this->logger->info('PayPal Payment Response: '.serialize($payment));
 
-			$this->logger->error('Transaction state: '.$payment->getState());
+			$this->logger->info('Transaction state: '.$payment->getState());
 		    if ($payment->getState() != 'approved') {
 				$this->display_error('Transaction was not approved.');
 				return;
