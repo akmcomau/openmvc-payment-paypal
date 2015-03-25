@@ -4,6 +4,7 @@ namespace modules\payment_paypal\classes;
 
 use modules\checkout\classes\Cart;
 use core\classes\Encryption;
+use core\classes\Logger;
 
 use PayPal\Rest\ApiContext;
 use PayPal\Auth\OAuthTokenCredential;
@@ -20,6 +21,7 @@ class PayPalRestAPI {
 	protected $config;
 	protected $module_config;
 	protected $url;
+	protected $logger;
 
 	protected $mode;
 	protected $client_id;
@@ -31,6 +33,7 @@ class PayPalRestAPI {
 		$this->module_config = $config->moduleConfig('\modules\payment_paypal');
 		$this->config        = $config;
 		$this->url           = $url;
+		$this->logger        = Logger::getLogger(get_class($this));
 
 		$this->mode      = ($this->module_config->mode == 'live') ? 'live' : 'sandbox';
 		$this->client_id = $this->module_config->client_id;
@@ -50,10 +53,15 @@ class PayPalRestAPI {
 		$amount->setCurrency($this->module_config->currency);
 		$amount->setTotal($cart->getGrandTotal());
 
+		$transaction = new Transaction();
+		$transaction->setDescription($this->config->siteConfig()->name." Checkout");
+		$transaction->setAmount($amount);
+
+	    /*
+		// Gives 400 error
+
 		// Create the items
 		$items = new ItemList();
-		/*
-		Get invalid request error when this is used ????
 		foreach ($cart->getContents() as $cart_item) {
 			$item = new Item();
 			$item->setQuantity($cart_item->getQuantity());
@@ -63,12 +71,8 @@ class PayPalRestAPI {
 			$item->setSku('asdfad'.rand());
 			$items->addItem(array($item));
 		}
-		*/
-
-		$transaction = new Transaction();
-		$transaction->setDescription($this->config->siteConfig()->name." Checkout");
-		$transaction->setAmount($amount);
 		$transaction->setItemList($items);
+		*/
 
 		$redirectUrls = new RedirectUrls();
 		$redirectUrls->setReturnUrl($this->url->getUrl('PaymentPayPal', 'confirm'));
@@ -80,7 +84,9 @@ class PayPalRestAPI {
 		$payment->setRedirectUrls($redirectUrls);
 		$payment->setTransactions(array($transaction));
 
+		$this->logger->info("Set Payment: ".$payment->toJSON());
 		$payment->create($apiContext);
+		$this->logger->info("Response: ".$payment->toJSON());
 
 		return $payment;
 	}
@@ -95,7 +101,9 @@ class PayPalRestAPI {
 		$payment->setId($payment_id);
 		$execution = new PaymentExecution();
 		$execution->setPayerId($payer_id);
+		$this->logger->info("Confirm Payment: ".$payment->toJSON()." : ".$execution->toJSON());
 		$payment->execute($execution, $apiContext);
+		$this->logger->info("Response: ".$payment->toJSON()." : ".$execution->toJSON());
 
 		return $payment;
 	}

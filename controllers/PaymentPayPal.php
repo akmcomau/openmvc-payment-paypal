@@ -17,6 +17,7 @@ use core\classes\FormValidator;
 use modules\checkout\classes\Cart;
 use modules\checkout\classes\Order;
 use modules\payment_paypal\classes\PayPalRestAPI;
+use PayPal\Exception\PayPalConnectionException;
 
 class PaymentPayPal extends Controller {
 
@@ -40,13 +41,18 @@ class PaymentPayPal extends Controller {
 			$api = new PayPalRestAPI($this->config, $this->url);
 			$payment = $api->set_express_checkout($cart);
 		}
+		catch (PayPalConnectionException $ex) {
+			$this->logger->error('PayPal Error: '.$ex->getMessage().': '.$ex->getData());
+			$this->display_error();
+			return;
+		}
 		catch (Exception $ex) {
 			$this->logger->error('PayPal Error: '.$ex->getMessage());
 			$this->display_error();
 			return;
 		}
 
-		$this->logger->info('Redirecting to PayPal: '.serialize($payment));
+		$this->logger->info('Redirecting to PayPal');
 		throw new RedirectException($payment->getApprovalLink());
 	}
 
@@ -68,13 +74,17 @@ class PaymentPayPal extends Controller {
 			$api = new PayPalRestAPI($this->config, $this->url);
 			$payment = $api->do_express_checkout_payment($payer_id, $payment_id, $token);
 			$payer = $payment->getPayer();
-			$this->logger->info('PayPal Payment Response: '.serialize($payment));
 
 			$this->logger->info('Transaction state: '.$payment->getState());
 		    if ($payment->getState() != 'approved') {
 				$this->display_error('Transaction was not approved.');
 				return;
 			}
+		}
+		catch (PayPalConnectionException $ex) {
+			$this->logger->error('PayPal Error: '.$ex->getMessage().': '.$ex->getData());
+			$this->display_error();
+			return;
 		}
 		catch (Exception $ex) {
 			$this->logger->error('PayPal Error: '.$ex->getMessage());
@@ -117,8 +127,8 @@ class PaymentPayPal extends Controller {
 		$paypal->paypal_reference        = $payment_id;
 		$paypal->paypal_amount           = $sale->getAmount()->getTotal();
 		$paypal->paypal_fee              = $fee;
-		$paypal->paypal_payer_info       = serialize($payer->getPayerInfo());
-		$paypal->paypal_transaction_info = serialize($payment);
+		$paypal->paypal_payer_info       = $payer->toJSON();
+		$paypal->paypal_transaction_info = $payment->toJSON();
 		$paypal->insert();
 
 		if ($checkout->anonymous) {
