@@ -53,6 +53,7 @@ class PayPalRestAPI {
 		// Create the items
 		$items = new ItemList();
 		/*
+		Get invalid request error when this is used ????
 		foreach ($cart->getContents() as $cart_item) {
 			$item = new Item();
 			$item->setQuantity($cart_item->getQuantity());

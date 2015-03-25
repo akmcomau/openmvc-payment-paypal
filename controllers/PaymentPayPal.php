@@ -185,11 +185,11 @@ class PaymentPayPal extends Controller {
 
 		// create the address
 		$address = $model->getModel('\core\classes\models\Address');
-		$address->first_name  = $payer_info->getFirstName();
-		$address->last_name   = $payer_info->getLastName();
-		$address->line1       = $paypal_address->getLine1();
+		$address->first_name  = $payer_info->getFirstName() ? $payer_info->getFirstName() : '';
+		$address->last_name   = $payer_info->getLastName() ? $payer_info->getLastName() : '';
+		$address->line1       = $paypal_address->getLine1() ? $paypal_address->getLine1() : '';
 		$address->line2       = $paypal_address->getLine2() ? $paypal_address->getLine2() : '';
-		$address->postcode    = $paypal_address->getPostalCode();
+		$address->postcode    = $paypal_address->getPostalCode() ? $paypal_address->getPostalCode() : '';
 		$address->city_id     = $city->id;
 		$address->state_id    = $state->id;
 		$address->country_id  = $country->id;
