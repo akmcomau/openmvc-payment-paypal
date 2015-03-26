@@ -145,9 +145,9 @@ class PaymentPayPal extends Controller {
 		$model = new Model($this->config, $this->database);
 		$customer = $model->getModel('\core\classes\models\Customer');
 		$customer->password   = '';
-		$customer->first_name = $payer_info->getFirstName();
-		$customer->last_name  = $payer_info->getLastName();
-		$customer->email      = $payer_info->getEmail();
+		$customer->first_name = $payer_info->getFirstName() ? $payer_info->getFirstName() : '';
+		$customer->last_name  = $payer_info->getLastName() ? $payer_info->getLastName() : '';
+		$customer->email      = $payer_info->getEmail() ? $payer_info->getEmail() : '';
 		$customer->login      = $customer->email;
 
 		return $customer;
