@@ -43,7 +43,7 @@ class PaymentPayPal extends Controller {
 		}
 		catch (PayPalConnectionException $ex) {
 			$this->logger->error('PayPal Error: '.$ex->getMessage().': '.$ex->getData());
-			$this->display_error();
+			$this->display_error($ex->getData());
 			return;
 		}
 		catch (Exception $ex) {
@@ -83,7 +83,7 @@ class PaymentPayPal extends Controller {
 		}
 		catch (PayPalConnectionException $ex) {
 			$this->logger->error('PayPal Error: '.$ex->getMessage().': '.$ex->getData());
-			$this->display_error();
+			$this->display_error($ex->getData());
 			return;
 		}
 		catch (Exception $ex) {
@@ -209,18 +209,18 @@ class PaymentPayPal extends Controller {
 
 	protected function display_error($response = NULL) {
 		$this->language->loadLanguageFile('payment_paypal.php', 'modules'.DS.'payment_paypal');
+		try {
+			if ($response) $response = json_decode($response);
+		}
+		catch (Exception $ex) {
+			$response = NULL;
+		}
 
 		$error_message = '';
-		$errors = $response ? $response->getErrors() : array();
-		$errors = is_array($errors) ? $errors : [ $errors ];
 		$is_10486 = FALSE;
-		foreach ($errors as $error) {
-			if ($error->getErrorCode() == 10486) {
-				$is_10486 = TRUE;
-			}
-			$error_message .= $error->getErrorCode().': '.$error->getLongMessage().'<br />';
-		}
-		if ($error_message == '') $error_message = 'An error occurred';
+		if ($response && $response->name == 'INSTRUMENT_DECLINED') $is_10486 = TRUE;
+		else if ($response) $error_message = $response->message;
+		else $error_message = 'An error occurred';
 
 		$data = [
 			'errors' => $error_message,
