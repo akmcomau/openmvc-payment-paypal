@@ -169,12 +169,12 @@ class PaymentPayPal extends Controller {
 		// get the state
 		$state = $model->getModel('\core\classes\models\State')->get([
 			'country_id' => $country->id,
-			'code' => $paypal_address->getState(),
+			'name' => $paypal_address->getState(),
 		]);
 		if (!$state) {
 			$state = $model->getModel('\core\classes\models\State');
 			$state->country_id = $country->id;
-			$state->code       = $paypal_address->getState();
+			$state->abbrev     = '';
 			$state->name       = $paypal_address->getState();
 			$state->insert();
 		}
