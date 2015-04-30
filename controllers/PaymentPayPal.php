@@ -167,28 +167,31 @@ class PaymentPayPal extends Controller {
 		}
 
 		// get the state
-		$state = $model->getModel('\core\classes\models\State')->get([
-			'country_id' => $country->id,
-			'name' => $paypal_address->getState(),
-		]);
-		if (!$state) {
-			$state = $model->getModel('\core\classes\models\State');
-			$state->country_id = $country->id;
-			$state->abbrev     = '';
-			$state->name       = $paypal_address->getState();
-			$state->insert();
+		$state = NULL;
+		if ($paypal_address->getState()) {
+			$state = $model->getModel('\core\classes\models\State')->get([
+				'country_id' => $country->id,
+				'name' => $paypal_address->getState(),
+			]);
+			if (!$state) {
+				$state = $model->getModel('\core\classes\models\State');
+				$state->country_id = $country->id;
+				$state->abbrev     = '';
+				$state->name       = $paypal_address->getState();
+				$state->insert();
+			}
 		}
 
 		// get the city
 		$city = $model->getModel('\core\classes\models\City')->get([
 			'country_id' => $country->id,
-			'state_id' => $state->id,
+			'state_id' => $state ? $state->id : NULL,
 			'name' => $paypal_address->getCity(),
 		]);
 		if (!$city) {
 			$city = $model->getModel('\core\classes\models\City');
 			$city->country_id = $country->id;
-			$city->state_id   = $state->id;
+			$city->state_id   = $state ? $state->id : NULL;
 			$city->name       = $paypal_address->getCity();
 			$city->insert();
 		}
@@ -201,7 +204,7 @@ class PaymentPayPal extends Controller {
 		$address->line2       = $paypal_address->getLine2() ? $paypal_address->getLine2() : '';
 		$address->postcode    = $paypal_address->getPostalCode() ? $paypal_address->getPostalCode() : '';
 		$address->city_id     = $city->id;
-		$address->state_id    = $state->id;
+		$address->state_id    = $state ? $state->id : NULL;
 		$address->country_id  = $country->id;
 
 		return $address;
