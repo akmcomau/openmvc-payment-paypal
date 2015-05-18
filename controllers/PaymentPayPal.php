@@ -102,9 +102,6 @@ class PaymentPayPal extends Controller {
 		// create the customer
 		$customer = $this->createCustomer($payer->getPayerInfo());
 		$address = $this->createAddress($payer->getPayerInfo());
-		if (!$address) {
-			return;
-		}
 
 		// purchase the order
 		$model = new Model($this->config, $this->database);
@@ -162,8 +159,10 @@ class PaymentPayPal extends Controller {
 			'code' => $paypal_address->getCountryCode()
 		]);
 		if (!$country) {
-			$this->invalidCountry($paypal_address->getCountryCode());
-			return NULL;
+			$country = $model->getModel('\core\classes\models\Country');
+			$country->code = $paypal_address->getCountryCode();
+			$country->name = $paypal_address->getCountryCode();
+			$country->insert();
 		}
 
 		// get the state
