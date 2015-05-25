@@ -68,8 +68,8 @@ class PaymentPayPal extends Controller {
 		$payer_id   = $this->request->requestParam('PayerID');
 		$payment_id = $this->request->requestParam('paymentId');
 
-		$payment = null;
-		$payer = null;
+		$payment = NULL;
+		$payer = NULL;
 		try {
 			$api = new PayPalRestAPI($this->config, $this->url);
 			$payment = $api->do_express_checkout_payment($payer_id, $payment_id, $token);
@@ -100,8 +100,17 @@ class PaymentPayPal extends Controller {
 		$fee = $fee ? $fee : 0;
 
 		// create the customer
-		$customer = $this->createCustomer($payer->getPayerInfo());
-		$address = $this->createAddress($payer->getPayerInfo());
+		// sometimees paypal does not reply with a shipping address
+		// so a address cannot be created
+		$customer = NULL;
+		$address = NULL;
+		if ($payer->getPayerInfo()->getEmail()) {
+			$customer = $this->createCustomer($payer->getPayerInfo());
+			$address = $this->createAddress($payer->getPayerInfo());
+		}
+		else {
+			$this->logger->error("PayPal did not respond with PayerInfo");
+		}
 
 		// purchase the order
 		$model = new Model($this->config, $this->database);
@@ -114,6 +123,7 @@ class PaymentPayPal extends Controller {
 			$checkout->status_id = $status->getStatusId('Complete');
 		}
 		$checkout->fees = $fee;
+		$checkout->receipt_note = $customer ? NULL : 'paypal_no_payer_info';
 		$checkout->update();
 		$order->sendOrderEmails($checkout, $this->language);
 		$cart->clear();
