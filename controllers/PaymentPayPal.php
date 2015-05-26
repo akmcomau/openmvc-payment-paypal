@@ -97,7 +97,6 @@ class PaymentPayPal extends Controller {
 
 		$enc_checkout_id = NULL;
 		try {
-			throw new Exception("sdaf");
 			// Get the fees
 			$transactions = $payment->getTransactions();
 			$sales = $transactions[0]->getRelatedResources();
