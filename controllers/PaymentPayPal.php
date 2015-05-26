@@ -8,7 +8,10 @@ use core\classes\exceptions\RedirectException;
 use core\classes\renderable\Controller;
 use core\classes\Config;
 use core\classes\Database;
+use core\classes\Email;
 use core\classes\Response;
+use core\classes\Template;
+use core\classes\Language;
 use core\classes\Request;
 use core\classes\Encryption;
 use core\classes\Model;
@@ -92,60 +95,99 @@ class PaymentPayPal extends Controller {
 			return;
 		}
 
-		// Get the fees
-		$transactions = $payment->getTransactions();
-		$sales = $transactions[0]->getRelatedResources();
-		$sale = $sales[0]->getSale();
-		$fee = $sale->getTransactionFee()->getValue();
-		$fee = $fee ? $fee : 0;
+		$enc_checkout_id = NULL;
+		try {
+			throw new Exception("sdaf");
+			// Get the fees
+			$transactions = $payment->getTransactions();
+			$sales = $transactions[0]->getRelatedResources();
+			$sale = $sales[0]->getSale();
+			$fee = $sale->getTransactionFee()->getValue();
+			$fee = $fee ? $fee : 0;
 
-		// create the customer
-		// sometimees paypal does not reply with a shipping address
-		// so a address cannot be created
-		$customer = NULL;
-		$address = NULL;
-		if ($payer->getPayerInfo()->getEmail()) {
-			$customer = $this->createCustomer($payer->getPayerInfo());
-			$address = $this->createAddress($payer->getPayerInfo());
-		}
-		else {
-			$this->logger->error("PayPal did not respond with PayerInfo");
-		}
+			// create the customer
+			// sometimees paypal does not reply with a shipping address
+			// so a address cannot be created
+			$customer = NULL;
+			$address = NULL;
+			if ($payer->getPayerInfo()->getEmail()) {
+				$customer = $this->createCustomer($payer->getPayerInfo());
+				$address = $this->createAddress($payer->getPayerInfo());
+			}
+			else {
+				$this->logger->error("PayPal did not respond with PayerInfo");
+			}
 
-		// purchase the order
-		$model = new Model($this->config, $this->database);
-		$status = $model->getModel('\modules\checkout\classes\models\CheckoutStatus');
-		$checkout = $order->purchase('paypal', $customer, $address, $address);
-		if ($checkout->shipping_address_id) {
-			$checkout->status_id = $status->getStatusId('Processing');
-		}
-		else {
-			$checkout->status_id = $status->getStatusId('Complete');
-		}
-		$checkout->fees = $fee;
-		$checkout->receipt_note = $customer ? NULL : 'paypal_no_payer_info';
-		$checkout->update();
-		$order->sendOrderEmails($checkout, $this->language);
-		$cart->clear();
+			// purchase the order
+			$model = new Model($this->config, $this->database);
+			$status = $model->getModel('\modules\checkout\classes\models\CheckoutStatus');
+			$checkout = $order->purchase('paypal', $customer, $address, $address);
+			$enc_checkout_id = Encryption::obfuscate($checkout->id, $this->config->siteConfig()->secret);
+			if ($checkout->shipping_address_id) {
+				$checkout->status_id = $status->getStatusId('Processing');
+			}
+			else {
+				$checkout->status_id = $status->getStatusId('Complete');
+			}
+			$checkout->fees = $fee;
+			$checkout->receipt_note = $customer ? NULL : 'paypal_no_payer_info';
+			$checkout->update();
+			$order->sendOrderEmails($checkout, $this->language);
 
-		// create the paypal transaction record
-		$paypal = $model->getModel('\modules\payment_paypal\classes\models\PayPal');
-		$paypal->checkout_id             = $checkout->id;
-		$paypal->paypal_reference        = $payment_id;
-		$paypal->paypal_amount           = $sale->getAmount()->getTotal();
-		$paypal->paypal_fee              = $fee;
-		$paypal->paypal_payer_info       = $payer->toJSON();
-		$paypal->paypal_transaction_info = $payment->toJSON();
-		$paypal->insert();
+			// create the paypal transaction record
+			$paypal = $model->getModel('\modules\payment_paypal\classes\models\PayPal');
+			$paypal->checkout_id             = $checkout->id;
+			$paypal->paypal_reference        = $payment_id;
+			$paypal->paypal_amount           = $sale->getAmount()->getTotal();
+			$paypal->paypal_fee              = $fee;
+			$paypal->paypal_payer_info       = $payer->toJSON();
+			$paypal->paypal_transaction_info = $payment->toJSON();
+			$paypal->insert();
 
-		if ($checkout->anonymous) {
-			$this->request->session->set('anonymous_checkout_purchase', TRUE);
+			if ($checkout->anonymous) {
+				$this->request->session->set('anonymous_checkout_purchase', TRUE);
+			}
 		}
-
-		$enc_checkout_id = Encryption::obfuscate($checkout->id, $this->config->siteConfig()->secret);
+		catch (Exception $ex) {
+			$this->logger->error('Purchasing Error: '.$ex->getMessage());
+			$this->request->session->delete('paypal-error-email-shown');
+			throw new RedirectException($this->url->getUrl('PaymentPayPal', 'errorPaid'));
+		}
 
 		// goto the receipt
+		$cart->clear();
 		throw new RedirectException($this->url->getUrl('Checkout', 'receipt', [$enc_checkout_id]));
+	}
+
+	public function errorPaid() {
+		$this->language->loadLanguageFile('payment_paypal.php', 'modules'.DS.'payment_paypal');
+		$this->language->loadLanguageFile('checkout.php', 'modules'.DS.'checkout');
+
+		$cart = new Cart($this->config, $this->database, $this->request);
+		$data = [
+			'contents' => $cart->getContents(),
+			'total' => $cart->getCartSellTotal(),
+		];
+
+		if (!$this->request->session->get('paypal-error-email-shown')) {
+			$body = $this->getEmailTemplate($this->language, 'emails/internal_error.txt.php', $data, 'modules'.DS.'payment_paypal');
+			$html = $this->getEmailTemplate($this->language, 'emails/internal_error.html.php', $data, 'modules'.DS.'payment_paypal');
+			$email = new Email($this->config);
+			$email->setToEmail($this->config->siteConfig()->email_addresses->orders);
+			$email->setSubject($this->config->siteConfig()->name.': '.$this->language->get('internal_error_subject'));
+			$email->setBodyTemplate($body);
+			$email->setHtmlTemplate($html);
+			$email->send();
+
+			$this->request->session->set('paypal-error-email-shown', TRUE);
+		}
+
+		$template = $this->getTemplate('pages/internal_error.php', $data, 'modules'.DS.'payment_paypal');
+		$this->response->setContent($template->render());
+	}
+
+	protected function getEmailTemplate(Language $language, $filename, array $data = NULL, $path = NULL) {
+		return new Template($this->config, $language, $filename, $data, $path);
 	}
 
 	protected function createCustomer($payer_info) {
