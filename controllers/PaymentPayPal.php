@@ -101,7 +101,11 @@ class PaymentPayPal extends Controller {
 			$transactions = $payment->getTransactions();
 			$sales = $transactions[0]->getRelatedResources();
 			$sale = $sales[0]->getSale();
-			$fee = $sale->getTransactionFee()->getValue();
+			$fee = 0;
+			print_r($sale->getTransactionFee());
+			if (is_object($sale->getTransactionFee())) {
+				$sale->getTransactionFee()->getValue();
+			}
 			$fee = $fee ? $fee : 0;
 
 			// create the customer
@@ -148,7 +152,7 @@ class PaymentPayPal extends Controller {
 			}
 		}
 		catch (Exception $ex) {
-			$this->logger->error('Purchasing Error: '.$ex->getMessage());
+			$this->logger->error('Purchasing Error: '.$ex->getMessage()."\n".$ex);
 			$this->request->session->delete('paypal-error-email-shown');
 			throw new RedirectException($this->url->getUrl('PaymentPayPal', 'errorPaid'));
 		}

@@ -66,7 +66,7 @@ class PayPalRestAPI {
 			$item = new Item();
 			$item->setQuantity($cart_item->getQuantity());
 			$item->setName($cart_item->getName());
-			$item->setPrice($cart_item->getPrice());
+			$item->setPrice($cart_item->getSellPrice());
 			$item->setCurrency($this->module_config->currency);
 			$item->setSku('asdfad'.rand());
 			$items->addItem(array($item));
