@@ -50,7 +50,7 @@ class PayPalRestAPI {
 		$payer->setPaymentMethod("paypal");
 
 		$amount = new Amount();
-		$amount->setCurrency($this->module_config->currency);
+		$amount->setCurrency($this->config->siteConfig()->currency);
 		$amount->setTotal($cart->getGrandTotal());
 
 		$transaction = new Transaction();
@@ -67,7 +67,7 @@ class PayPalRestAPI {
 			$item->setQuantity($cart_item->getQuantity());
 			$item->setName($cart_item->getName());
 			$item->setPrice($cart_item->getSellPrice());
-			$item->setCurrency($this->module_config->currency);
+			$item->setCurrency($this->config->siteConfig()->currency);
 			$item->setSku('asdfad'.rand());
 			$items->addItem(array($item));
 		}
