@@ -102,7 +102,6 @@ class PaymentPayPal extends Controller {
 			$sales = $transactions[0]->getRelatedResources();
 			$sale = $sales[0]->getSale();
 			$fee = 0;
-			print_r($sale->getTransactionFee());
 			if (is_object($sale->getTransactionFee())) {
 				$sale->getTransactionFee()->getValue();
 			}
