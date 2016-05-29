@@ -45,12 +45,12 @@ class PaymentPayPal extends Controller {
 			$payment = $api->set_express_checkout($cart);
 		}
 		catch (PayPalConnectionException $ex) {
-			$this->logger->error('PayPal Error: '.$ex->getMessage().': '.$ex->getData());
+			$this->logger->error('PayPal Error: '.$ex->getMessage().': '.$ex->getData()."\n".$ex);
 			$this->display_error($ex->getData());
 			return;
 		}
 		catch (Exception $ex) {
-			$this->logger->error('PayPal Error: '.$ex->getMessage());
+			$this->logger->error('PayPal Error: '.$ex->getMessage()."\n".$ex);
 			$this->display_error();
 			return;
 		}
@@ -70,6 +70,7 @@ class PaymentPayPal extends Controller {
 		$token      = $this->request->requestParam('token');
 		$payer_id   = $this->request->requestParam('PayerID');
 		$payment_id = $this->request->requestParam('paymentId');
+		$this->logger->info("Token: $token, Payer: $payer_id, Payment: $payment_id");
 
 		$payment = NULL;
 		$payer = NULL;
@@ -85,12 +86,12 @@ class PaymentPayPal extends Controller {
 			}
 		}
 		catch (PayPalConnectionException $ex) {
-			$this->logger->error('PayPal Error: '.$ex->getMessage().': '.$ex->getData());
+			$this->logger->error('PayPal Error: '.$ex->getMessage().': '.$ex->getData()."\n".$ex);
 			$this->display_error($ex->getData());
 			return;
 		}
 		catch (Exception $ex) {
-			$this->logger->error('PayPal Error: '.$ex->getMessage());
+			$this->logger->error('PayPal Error: '.$ex->getMessage()."\n".$ex);
 			$this->display_error();
 			return;
 		}
@@ -208,7 +209,7 @@ class PaymentPayPal extends Controller {
 		$model = new Model($this->config, $this->database);
 		$paypal_address = $payer_info->getShippingAddress();
 
-		# The country must exist
+		// The country must exist
 		$country = $model->getModel('\core\classes\models\Country')->get([
 			'code' => $paypal_address->getCountryCode()
 		]);
@@ -227,26 +228,50 @@ class PaymentPayPal extends Controller {
 				'name' => $paypal_address->getState(),
 			]);
 			if (!$state) {
-				$state = $model->getModel('\core\classes\models\State');
-				$state->country_id = $country->id;
-				$state->abbrev     = $paypal_address->getState();
-				$state->name       = $paypal_address->getState();
-				$state->insert();
+				try {
+					$state = $model->getModel('\core\classes\models\State');
+					$state->country_id = $country->id;
+					$state->abbrev     = $paypal_address->getState();
+					$state->name       = $paypal_address->getState();
+					$state->insert();
+				}
+				catch (\Exception $ex) {
+					$state = $model->getModel('\core\classes\models\State')->get([
+						'country_id' => $country->id,
+						'name' => $paypal_address->getState(),
+					]);
+					if (!$state) {
+						throw new \ErrorException("Error creating state record: ".$ex);
+					}
+				}
 			}
 		}
 
-		// get the city
+		// get the city ... just use N/A if no city name given
+		$city_name = $paypal_address->getCity() ? $paypal_address->getCity() : 'N/A';
 		$city = $model->getModel('\core\classes\models\City')->get([
 			'country_id' => $country->id,
 			'state_id' => $state ? $state->id : NULL,
-			'name' => $paypal_address->getCity(),
+			'name' => $city_name,
 		]);
 		if (!$city) {
-			$city = $model->getModel('\core\classes\models\City');
-			$city->country_id = $country->id;
-			$city->state_id   = $state ? $state->id : NULL;
-			$city->name       = $paypal_address->getCity();
-			$city->insert();
+			try {
+				$city = $model->getModel('\core\classes\models\City');
+				$city->country_id = $country->id;
+				$city->state_id   = $state ? $state->id : NULL;
+				$city->name       = $city_name;
+				$city->insert();
+			}
+			catch (\Exception $ex) {
+				$city = $model->getModel('\core\classes\models\City')->get([
+					'country_id' => $country->id,
+					'state_id' => $state ? $state->id : NULL,
+					'name' => $city_name,
+				]);
+				if (!$city) {
+					throw new \ErrorException("Error creating city record: ".$ex);
+				}
+			}
 		}
 
 		// create the address

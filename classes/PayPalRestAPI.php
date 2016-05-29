@@ -49,9 +49,11 @@ class PayPalRestAPI {
 		$payer = new Payer();
 		$payer->setPaymentMethod("paypal");
 
+		$amount_total = money_format('%!^n', $cart->getGrandTotal());
 		$amount = new Amount();
 		$amount->setCurrency($this->config->siteConfig()->currency);
-		$amount->setTotal(money_format('%!^n', $cart->getGrandTotal()));
+		$this->logger->info("Setting PayPal Total: ".$amount_total.' '.$this->config->siteConfig()->currency);
+		$amount->setTotal($amount_total);
 
 		$transaction = new Transaction();
 		$transaction->setDescription($this->config->siteConfig()->name." Checkout");
