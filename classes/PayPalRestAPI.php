@@ -52,7 +52,7 @@ class PayPalRestAPI {
 		$amount_total = money_format('%!^n', $cart->getGrandTotal());
 
 		// TWD fails if total is not a whole number
-		if ($this->config->siteConfig()->currency == 'TWD') $amount_total = floor($amount_total);
+        if (property_exists($this->config->siteConfig(), 'currency') && $this->config->siteConfig()->currency == 'TWD') $amount_total = floor($amount_total);
 
 		$amount = new Amount();
 		$amount->setCurrency($this->config->siteConfig()->currency);
