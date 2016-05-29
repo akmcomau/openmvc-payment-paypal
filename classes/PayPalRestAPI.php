@@ -49,14 +49,19 @@ class PayPalRestAPI {
 		$payer = new Payer();
 		$payer->setPaymentMethod("paypal");
 
-		$amount_total = money_format('%!^n', $cart->getGrandTotal());
-
 		// TWD fails if total is not a whole number
-        if (property_exists($this->config->siteConfig(), 'currency') && $this->config->siteConfig()->currency == 'TWD') $amount_total = floor($amount_total);
+		$amount_total = money_format('%!^n', $cart->getGrandTotal());
+		$currency = $this->module_config->currency;
+        if (property_exists($this->config->siteConfig(), 'currency')) {
+			$currency = $this->config->siteConfig()->currency;
+			if ($this->config->siteConfig()->currency == 'TWD') {
+				$amount_total = floor($amount_total);
+			}
+		}
 
 		$amount = new Amount();
-		$amount->setCurrency($this->config->siteConfig()->currency);
-		$this->logger->info("Setting PayPal Total: ".$amount_total.' '.$this->config->siteConfig()->currency);
+		$amount->setCurrency($currency);
+		$this->logger->info("Setting PayPal Total: ".$amount_total.' '.$currency);
 		$amount->setTotal($amount_total);
 
 		$transaction = new Transaction();
