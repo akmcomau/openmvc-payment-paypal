@@ -59,6 +59,9 @@ class PayPalRestAPI {
 			}
 		}
 
+		// replace any comma's with decimal points
+		$amount_total = str_replace(',', '.', $amount_total);
+
 		$amount = new Amount();
 		$amount->setCurrency($currency);
 		$this->logger->info("Setting PayPal Total: ".$amount_total.' '.$currency);
