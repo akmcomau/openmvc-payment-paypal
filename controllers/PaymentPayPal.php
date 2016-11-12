@@ -228,20 +228,26 @@ class PaymentPayPal extends Controller {
 				'name' => $paypal_address->getState(),
 			]);
 			if (!$state) {
-				try {
-					$state = $model->getModel('\core\classes\models\State');
-					$state->country_id = $country->id;
-					$state->abbrev     = $paypal_address->getState();
-					$state->name       = $paypal_address->getState();
-					$state->insert();
-				}
-				catch (\Exception $ex) {
-					$state = $model->getModel('\core\classes\models\State')->get([
-						'country_id' => $country->id,
-						'name' => $paypal_address->getState(),
-					]);
-					if (!$state) {
-						throw new \ErrorException("Error creating state record: ".$ex);
+				$state = $model->getModel('\core\classes\models\State')->get([
+					'country_id' => $country->id,
+					'abbrev' => $paypal_address->getState(),
+				]);
+				if (!$state) {
+					try {
+						$state = $model->getModel('\core\classes\models\State');
+						$state->country_id = $country->id;
+						$state->abbrev     = $paypal_address->getState();
+						$state->name       = $paypal_address->getState();
+						$state->insert();
+					}
+					catch (\Exception $ex) {
+						$state = $model->getModel('\core\classes\models\State')->get([
+							'country_id' => $country->id,
+								'name' => $paypal_address->getState(),
+						]);
+						if (!$state) {
+							throw new \ErrorException("Error creating state record: ".$ex);
+						}
 					}
 				}
 			}
