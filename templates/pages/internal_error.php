@@ -1,4 +1,4 @@
-<div class="<?php echo $page_div_class; ?>">
+<div class="<?php echo $page_class; ?>">
 	<h1 style="color: darkred;"><?php echo nl2br($text_paypal_error_msg); ?></h1>
 	<br />
 	<form action="<?php echo $this->url->getUrl('Cart'); ?>" method="post">

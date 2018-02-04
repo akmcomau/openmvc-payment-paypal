@@ -1,4 +1,4 @@
-<div class="<?php echo $page_div_class; ?>">
+<div class="<?php echo $page_class; ?>">
 	 <h2><?php echo $text_bad_funding_method; ?></h2>
 	 <p>
 		 <?php echo $text_bad_funding_method_cause; ?>
